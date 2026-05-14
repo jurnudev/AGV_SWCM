@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AGV PRO Dashboard</title>
+    <!-- MQTT.js Library -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        :root {
+            /* Default Dark Theme Tokens */
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-color: #38bdf8;
+            --success-color: #22c55e;
+            --danger-color: #ef4444;
+            --btn-glow: rgba(56, 189, 248, 0.4);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        [data-theme="light"] {
+            --bg-color: #f1f5f9;
+            --card-bg: rgba(255, 255, 255, 0.8);
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --accent-color: #0284c7;
+            --btn-glow: rgba(2, 132, 199, 0.2);
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 10px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: var(--transition);
+            overflow-x: hidden;
+        }
+
+        .noselect {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        /* --- Header & Theme Toggle --- */
+        header {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            margin: 0;
+            background: linear-gradient(to right, var(--accent-color), #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .theme-toggle {
+            cursor: pointer;
+            font-size: 1.5rem;
+            background: var(--card-bg);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            color: var(--accent-color);
+            transition: var(--transition);
+        }
+
+        /* --- Dashboard Grid --- */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            width: 100%;
+            max-width: 500px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            transition: var(--transition);
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .card:hover {
+            border-color: var(--accent-color);
+            transform: translateY(-2px);
+        }
+
+        .card-title {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .card-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 5px;
+            background: var(--danger-color);
+            box-shadow: 0 0 10px var(--danger-color);
+        }
+
+        .status-dot.online {
+            background: var(--success-color);
+            box-shadow: 0 0 10px var(--success-color);
+        }
+
+        /* --- Control Panel --- */
+        .control-panel {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 24px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-ctrl {
+            aspect-ratio: 1/1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3.5rem;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.1s ease;
+        }
+
+        .btn-ctrl:active {
+            background: var(--accent-color);
+            transform: scale(0.92);
+            box-shadow: 0 0 20px var(--btn-glow);
+        }
+
+        .btn-main {
+            background: linear-gradient(135deg, var(--accent-color), #4f46e5);
+            color: white;
+        }
+
+        .btn-turn {
+            background: rgba(129, 140, 248, 0.15);
+            border-color: #818cf8;
+            color: #818cf8;
+        }
+
+        .btn-empty {
+            visibility: hidden;
+        }
+
+        /* --- Settings Panel --- */
+        .settings-panel {
+            width: 100%;
+            max-width: 500px;
+            margin-top: 20px;
+            padding: 15px;
+            background: var(--card-bg);
+            border-radius: 16px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        input {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 10px;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        .btn-action {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .sync-badge {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-top: 10px;
+            display: block;
+            text-align: center;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* --- Animations --- */
+        .glow-pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body class="noselect">
+
+    <header>
+        <h1>AGV MISSION CONTROL</h1>
+        <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
+    </header>
+
+    <div class="dashboard-grid">
+        <div class="card">
+            <div class="card-title">MQTT System</div>
+            <div class="card-value"><span id="mqttDot" class="status-dot"></span> <span id="mqttStatus">Offline</span>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">AGV Status</div>
+            <div class="card-value"><span id="wifiDot" class="status-dot"></span> <span id="wifiStatus">Offline</span>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">Safety Distance</div>
+            <div class="card-value"><span id="displayText">--</span> <small>cm</small></div>
+        </div>
+        <div class="card">
+            <div class="card-title">Current Client ID</div>
+            <div class="card-value" id="currentIdDisplay" style="font-size: 0.9rem;">None</div>
+        </div>
+    </div>
+
+    <div class="control-panel" id="ctrlPanel">
+        <!-- Top Row -->
+        <div class="btn-ctrl" data-action="left_front">↖</div>
+        <div class="btn-ctrl btn-main" data-action="forward">↑</div>
+        <div class="btn-ctrl" data-action="right_front">↗</div>
+
+        <!-- Mid Row -->
+        <div class="btn-ctrl btn-main" data-action="left">←</div>
+        <div class="btn-ctrl btn-turn"
+            style="background: rgba(239, 68, 68, 0.1); border-color: #ef4444; color: #ef4444;" data-action="stop">⏹
+        </div>
+        <div class="btn-ctrl btn-main" data-action="right">→</div>
+
+        <!-- Bottom Row -->
+        <div class="btn-ctrl" data-action="left_back">↙</div>
+        <div class="btn-ctrl btn-main" data-action="backward">↓</div>
+        <div class="btn-ctrl" data-action="right_back">↘</div>
+
+        <!-- Spin Row -->
+        <div class="btn-ctrl btn-turn" data-action="turn_left">↺</div>
+        <div class="btn-ctrl btn-empty"></div>
+        <div class="btn-ctrl btn-turn" data-action="turn_right">↻</div>
+    </div>
+
+    <div class="settings-panel">
+        <div class="card-title">Device Configuration</div>
+        <div class="input-group">
+            <input type="text" id="clientIdInput" placeholder="Enter AGV ID">
+            <button class="btn-action" onclick="saveID()">SAVE</button>
+        </div>
+        <span class="sync-badge" id="syncStatus">Topics: Initializing...</span>
+    </div>
+
+    <script>
+        // --- PRESERVED LOGIC FROM LV 1.html ---
+        var deviceID = "";
+        var mqttClient = null;
+        var lastHeartbeat = 0;
+
+        var topics = {
+            control: "agv/control",
+            forward: "agv/control/forward",
+            backward: "agv/control/backward",
+            left: "agv/control/left",
+            right: "agv/control/right",
+            stop: "agv/control/stop",
+            turn_left: "agv/control/turn_left",
+            turn_right: "agv/control/turn_right",
+            light: "agv/control/light",
+            status: "agv/status",
+            sensor_dist: "agv/sensor/distance",
+            sensor_temp: "agv/sensor/temperature",
+            sensor_humi: "agv/sensor/humidity",
+            sensor_gas: "agv/sensor/gas",
+            log: "agv/log"
+        };
+
+        // --- Theme System ---
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme');
+            const target = current === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', target);
+            document.getElementById('themeBtn').textContent = target === 'light' ? '🌙' : '☀️';
+            localStorage.setItem('theme', target);
+        }
+
+        async function init() {
+            // Load Theme
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.getElementById('themeBtn').textContent = savedTheme === 'light' ? '🌙' : '☀️';
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlId = urlParams.get('client_id');
+            const espIp = urlParams.get('esp_ip');
+
+            deviceID = urlId || localStorage.getItem('agv_client_id') || "";
+            if (!deviceID || deviceID.length < 4) {
+                deviceID = "AGV_PRO_" + Math.random().toString(16).substr(2, 4).toUpperCase();
+            }
+            localStorage.setItem('agv_client_id', deviceID);
+
+            if (espIp) {
+                try {
+                    const res = await fetch(`http://${espIp}/mqtt-topics`, { signal: AbortSignal.timeout(3000) });
+                    const syncedTopics = await res.json();
+                    topics = { ...topics, ...syncedTopics };
+                    document.getElementById('syncStatus').textContent = `Topics synced from ${espIp}`;
+                } catch (e) {
+                    document.getElementById('syncStatus').textContent = "Using default topics (Sync failed)";
+                }
+            }
+
+            document.getElementById('currentIdDisplay').textContent = deviceID;
+            document.getElementById('clientIdInput').value = deviceID;
+
+            // --- Bind Controls (Touch + Mouse Support) ---
+            const buttons = document.querySelectorAll('.btn-ctrl');
+            buttons.forEach(btn => {
+                const action = btn.getAttribute('data-action');
+                if (!action) return;
+
+                btn.addEventListener('mousedown', () => handleAction(action));
+                btn.addEventListener('mouseup', () => handleAction('stop'));
+                btn.addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(action); });
+                btn.addEventListener('touchend', (e) => { e.preventDefault(); handleAction('stop'); });
+            });
+
+            connectMQTT();
+        }
+
+        function connectMQTT() {
+            if (mqttClient) mqttClient.end(true);
+
+            const options = {
+                clientId: 'agv_pro_' + deviceID + '_' + Date.now(),
+                protocol: 'wss',
+                keepalive: 60,
+                connectTimeout: 10000,
+                reconnectPeriod: 2000,
+                clean: true,
+                rejectUnauthorized: false
+            };
+
+            mqttClient = mqtt.connect('wss://service.smartbox89.com:443/mqtt', options);
+
+            mqttClient.on('connect', () => {
+                updateUIStatus('mqtt', true, "Connected");
+                
+                // Subscribe to per-device unique topics
+                const myStatusTopic = `agv/${deviceID}/status`;
+                const myHeartbeatTopic = `agv/${deviceID}/heartbeat`;
+                
+                mqttClient.subscribe(myStatusTopic);
+                mqttClient.subscribe(myHeartbeatTopic);
+                mqttClient.subscribe(topics.sensor_dist);
+                mqttClient.subscribe(topics.log);
+                
+                console.log("[MQTT] Subscribed to unique topics for:", deviceID);
+            });
+
+            mqttClient.on('reconnect', () => updateUIStatus('mqtt', false, "Reconnecting..."));
+            mqttClient.on('offline', () => updateUIStatus('mqtt', false, "Offline"));
+
+            mqttClient.on('message', (topic, message) => {
+                const msg = message.toString();
+                const myStatusTopic = `agv/${deviceID}/status`;
+                const myHeartbeatTopic = `agv/${deviceID}/heartbeat`;
+
+                if (topic === myStatusTopic || topic === myHeartbeatTopic) {
+                    if (msg === "ONLINE") {
+                        lastHeartbeat = Date.now();
+                        updateUIStatus('wifi', true, "Online");
+                        console.log("[STATUS] Heartbeat/Status: ONLINE");
+                    } else if (msg === "OFFLINE") {
+                        updateUIStatus('wifi', false, "Offline");
+                        console.log("[STATUS] Status: OFFLINE");
+                    }
+                } else if (topic === topics.sensor_dist) {
+                    document.getElementById('displayText').textContent = msg;
+                } else if (topic === topics.log) {
+                    console.log("[AGV]", msg);
+                }
+            });
+        }
+
+        function handleAction(action) {
+            if (!mqttClient || !mqttClient.connected) return;
+            const targetTopic = topics[action] || topics.control;
+            const payload = JSON.stringify({ client_id: deviceID, cmd: action });
+            mqttClient.publish(targetTopic, payload, { qos: 1 });
+        }
+
+        function updateUIStatus(type, isOnline, text) {
+            const dot = document.getElementById(type + 'Dot');
+            const label = document.getElementById(type + 'Status');
+            label.textContent = text;
+            if (isOnline) dot.classList.add('online');
+            else dot.classList.remove('online');
+        }
+
+        function saveID() {
+            const val = document.getElementById('clientIdInput').value.trim();
+            if (val) { localStorage.setItem('agv_client_id', val); location.reload(); }
+        }
+
+        setInterval(() => {
+            // Heartbeat Timeout Logic (15-20 seconds debounce)
+            if (Date.now() - lastHeartbeat > 15000) {
+                updateUIStatus('wifi', false, "Offline");
+                console.warn("[STATUS] OFFLINE TIMEOUT");
+            }
+        }, 5000);
+
+        window.onload = init;
+        document.oncontextmenu = (e) => e.preventDefault();
+    </script>
+</body>
+
+</html>
